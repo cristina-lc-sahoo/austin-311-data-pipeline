@@ -1,0 +1,33 @@
+cat > .gitignore <<'EOF'
+# Python virtual environments
+.venv/
+venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# macOS files
+.DS_Store
+
+# Raw data files
+*.csv
+*.xlsx
+*.parquet
+
+# Local ingestion tracking
+data/last_successful_run.txt
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+*service-account*.json
+application_default_credentials.json
+*.pem
+*.key
+
+# IDE settings
+.vscode/
+.idea/
+EOF
