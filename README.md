@@ -1,45 +1,75 @@
 # Austin 311 Data Engineering & Analytics Pipeline
 
-An end-to-end data engineering and analytics project using real Austin 311 service request data. This project demonstrates Python-based data ingestion, Google Cloud Storage, BigQuery transformations, data quality validation, and interactive reporting with Looker Studio.
+An end-to-end cloud data engineering project that ingests, stores, transforms, validates, and visualizes real Austin 311 service request data. The pipeline uses Python and Google Cloud services to automate incremental data ingestion and refresh analytical reporting tables.
 
 ## Project Overview
 
-The goal is to build a reliable data pipeline that ingests Austin 311 service request data, stores raw source files, transforms and validates records in BigQuery, and presents useful insights through an interactive analytics dashboard.
+This project demonstrates the development of a cloud-based data pipeline, from public API ingestion through data warehousing and business intelligence reporting.
+
+The solution retrieves new and updated Austin 311 service requests, stores timestamped raw data files in Google Cloud Storage, loads records into BigQuery, applies SQL transformations, and provides interactive analytics through Looker Studio.
+
+The pipeline is containerized and deployed as a Cloud Run Job, with Cloud Scheduler configured to trigger daily execution.
 
 ## Architecture
 
-Python → Google Cloud Storage → BigQuery → Looker Studio
+**End-to-end pipeline:**
 
-## Technologies
+Austin 311 Public API → Cloud Run Job (Python) → Google Cloud Storage → BigQuery → Looker Studio → Google Sites
 
-- **Python** — Data ingestion, file processing, and validation
-- **Google Cloud Storage** — Raw CSV file storage
-- **Google BigQuery** — Cloud data warehouse, SQL transformations, and analytics
-- **Looker Studio** — Interactive data visualization and reporting
-- **Git / GitHub** — Source control and project documentation
+### Google Cloud Components
 
-## Work Completed
+- **Cloud Scheduler** — Triggers the pipeline daily at 6:00 AM Central Time.
+- **Cloud Run Jobs** — Executes the containerized Python ingestion and orchestration process.
+- **Artifact Registry** — Stores the Docker container image.
+- **Google Cloud Storage** — Stores timestamped incremental CSV files, SQL transformation scripts, and the pipeline watermark.
+- **BigQuery** — Stores raw and cleaned service request data and analytical summary tables.
+- **Looker Studio** — Provides interactive dashboards and visual analytics.
+- **Google Sites** — Hosts the published, client-facing analytics website.
 
-### 1. Data Ingestion and Processing
-- Developed Python scripts to support initial and incremental data ingestion.
-- Processed Austin 311 service request CSV files.
-- Created batch validation procedures to compare incoming datasets.
-- Examined duplicate records across incremental batches.
+## Pipeline Implementation
+
+### 1. API Ingestion and Incremental Processing
+
+- Developed Python scripts to retrieve Austin 311 service request data from the public API.
+- Implemented initial and incremental ingestion.
+- Uses a stored pipeline watermark to identify the starting point for subsequent runs.
+- Applies a 48-hour overlap to capture newly created and updated service requests.
+- Retrieves records in paginated batches.
+- Generates timestamped CSV files for traceability.
 
 ### 2. Cloud Storage
-- Created a Google Cloud project and Cloud Storage bucket.
-- Configured a raw incremental storage location.
-- Uploaded and verified source CSV files.
-- Preserved raw files for auditing and traceability.
+
+- Created and configured a Google Cloud Storage bucket.
+- Uploads incremental CSV files to a raw storage location.
+- Stores SQL transformation scripts separately from the container image.
+- Maintains the last successful run timestamp in a pipeline state file.
 
 ### 3. BigQuery Data Warehouse
-- Created the `austin_311` dataset.
-- Loaded source records into `service_requests_raw`.
-- Created `service_requests_clean` using SQL transformations.
-- Applied `ROW_NUMBER()` with `PARTITION BY sr_number` and ordering by `sr_updated_date` to retain the latest record for each service request.
 
-### 4. Data Validation and Quality
-Validated two incremental batches:
+Created the `austin_311` dataset with the following tables:
+
+- `service_requests_raw` — Appended source records from incremental ingestion.
+- `service_requests_clean` — Deduplicated service requests, retaining the latest available version.
+- `monthly_request_summary` — Monthly service request counts.
+- `daily_request_summary_october_2026` — Daily service request counts for October 2026.
+
+### 4. SQL Transformations
+
+Python handles pipeline orchestration, while SQL performs data transformations directly in BigQuery.
+
+The pipeline executes three SQL scripts:
+
+- `refresh_clean.sql` — Uses `ROW_NUMBER()` partitioned by service request number and ordered by update timestamp to retain the latest record.
+- `refresh_monthly.sql` — Rebuilds monthly service request summaries.
+- `refresh_daily_october.sql` — Rebuilds daily service request summaries for October 2026.
+
+Summary tables are rebuilt after incoming records are loaded successfully.
+
+### 5. Data Quality and Validation
+
+Validated incremental ingestion through batch comparison and BigQuery data quality checks.
+
+**Initial batch validation:**
 
 | Validation | Result |
 |---|---:|
@@ -47,98 +77,112 @@ Validated two incremental batches:
 | Second batch records | 1,866 |
 | Combined raw records | 27,766 |
 | Unique service requests | 25,900 |
-| Duplicate IDs across batches | 1,866 |
-| Duplicate records with differences | 0 |
+| Repeated IDs across batches | 1,866 |
+| Repeated records with differences | 0 |
 
-Additional data quality checks confirmed:
+Additional BigQuery validation confirmed:
+
 - No missing service request IDs in the clean dataset.
 - No missing creation dates.
 - No missing statuses.
-- Clean record count matched the distinct service request ID count.
+- One clean record per distinct service request ID.
 
-### 5. SQL Analytics
-Created BigQuery summary tables for reporting:
-- `monthly_request_summary` — Monthly service request volume.
-- `daily_request_summary_october_2026` — Daily service request volume for October 2026.
+### 6. Pipeline Automation
 
-Analyzed request trends and used a focused October daily view to make the time-series visualization more meaningful.
+Containerized the Python pipeline using Docker and deployed it as a Google Cloud Run Job.
 
-### 6. Looker Studio Dashboard
-![Austin 311 Service Request Analytics Dashboard](docs/austin-311-dashboard.png)
-Created an interactive dashboard titled **Austin 311 Service Request Analytics**, including:
+Configured Cloud Scheduler to invoke the job daily at 6:00 AM Central Time.
+
+The automated workflow:
+
+1. Retrieves the last successful run timestamp from Cloud Storage.
+2. Requests new and updated records from the Austin 311 API using a 48-hour overlap.
+3. Creates and uploads a timestamped CSV file to Google Cloud Storage.
+4. Appends incoming records to the BigQuery raw table.
+5. Executes SQL transformations to rebuild the clean and summary tables.
+6. Updates the pipeline watermark after successful processing.
+
+The watermark is updated only after the data load and SQL transformations complete successfully.
+
+### 7. Analytics and Reporting
+
+Created an interactive Looker Studio dashboard titled **Austin 311 Service Request Analytics**.
+
+Dashboard includes:
+
 - Total service requests.
 - Top 10 service request types.
 - Service requests by department.
 - Daily service requests for October 2026.
+- Monthly service request trends.
 
-## Current Data Results
+**Project links:**
 
-- **27,766** raw records loaded.
-- **25,900** unique service requests in the clean dataset.
-- **0** differences found among the 1,866 repeated records across the two batches.
-- Data quality checks completed successfully.
+- [View the Looker Studio Dashboard](https://datastudio.google.com/reporting/57ca4424-9ab4-4b5c-9cdb-7e8d1c475f9c)
+- [View the Published Google Sites Website](https://sites.google.com/view/austin-311-analytics/)
+- [Dashboard Screenshot](https://github.com/cristina-lc-sahoo/austin-311-data-pipeline/blob/main/docs/austin-311-dashboard.png)
+
+## Latest Pipeline Results
+
+Latest successful manual Cloud Run execution (November 5, 2026):
+
+| BigQuery Table | Row Count |
+|---|---:|
+| `service_requests_raw` | 29,728 |
+| `service_requests_clean` | 26,816 |
+| `monthly_request_summary` | 37 |
+| `daily_request_summary_october_2026` | 31 |
+
+The clean table was independently validated for duplicate service request IDs and missing required fields.
+
+## Technologies
+
+- **Languages:** Python, SQL
+- **Cloud Platform:** Google Cloud Platform (GCP)
+- **Data Storage:** Google Cloud Storage
+- **Data Warehouse:** Google BigQuery
+- **Orchestration:** Cloud Scheduler, Cloud Run Jobs
+- **Containerization:** Docker
+- **Container Registry:** Artifact Registry
+- **Analytics & Reporting:** Looker Studio, Google Sites
+- **Version Control:** Git, GitHub
 
 ## Repository Contents
 
-- `ingest.py` — Initial Austin 311 data ingestion script.
-- `incremental_ingest.py` — Incremental ingestion script for retrieving new and updated records.
+- `ingest.py` — Initial data ingestion script.
+- `incremental_ingest.py` — Incremental API ingestion script.
 - `profile_data.py` — Source data profiling and inspection.
-- `validate_batches.py` — Batch comparison and validation, including duplicate and overlap checks.
-- `daily_pipeline.py` — Automated daily pipeline orchestration, including API ingestion, GCS uploads, BigQuery loading, and SQL execution.
-- `Dockerfile` — Defines the container image used to run the pipeline in Cloud Run.
+- `validate_batches.py` — Batch comparison and validation.
+- `daily_pipeline.py` — Automated pipeline orchestration, GCS integration, BigQuery loading, and SQL execution.
+- `Dockerfile` — Defines the container image used by Cloud Run.
 - `requirements.txt` — Python dependencies.
-- `sql/refresh_clean.sql` — Deduplicates raw records and retains the latest version of each service request.
-- `sql/refresh_monthly.sql` — Rebuilds monthly service request summary data.
-- `sql/refresh_daily_october.sql` — Rebuilds daily service request counts for October 2026.
-- `data/` — Local source data files (excluded from this public repository).
+- `sql/refresh_clean.sql` — Clean table transformation.
+- `sql/refresh_monthly.sql` — Monthly summary transformation.
+- `sql/refresh_daily_october.sql` — October daily summary transformation.
+- `data/` — Local source data files, excluded from the public repository.
 
-## Pipeline Architecture
-
-The project uses Google Cloud services to automate the ingestion, storage, transformation, and reporting of Austin 311 service request data.
-
-**Pipeline flow:**
-
-Austin 311 API → Cloud Run Job (Python) → Google Cloud Storage → BigQuery → Looker Studio → Google Sites
-
-### Cloud Components
-
-- **Cloud Scheduler:** Configured to trigger the pipeline daily at 6:00 AM Central Time.
-- **Cloud Run Jobs:** Executes the containerized Python pipeline.
-- **Google Cloud Storage:** Stores timestamped incremental CSV files, SQL transformation files, and the pipeline watermark.
-- **BigQuery:** Stores raw and cleaned service request data and analytical summary tables.
-- **Looker Studio:** Provides interactive reporting and visualization.
-- **Google Sites:** Hosts the client-facing dashboard website.
-
-### Data Processing
-
-1. Retrieve the last successful run timestamp from Cloud Storage.
-2. Request new and updated service records from the Austin 311 API, using a 48-hour overlap to capture updates.
-3. Write timestamped CSV files and upload them to Cloud Storage.
-4. Append incoming records to the BigQuery raw table.
-5. Execute SQL transformations in BigQuery:
-   - Deduplicate records by service request number, retaining the latest version.
-   - Rebuild monthly request summaries.
-   - Rebuild daily October 2026 request summaries.
-6. Update the pipeline watermark after successful processing.
-
-Python handles pipeline orchestration, while SQL performs the data transformations in BigQuery.
-
-## Project Status
+## Project Status and Future Improvements
 
 **Completed:**
-- Initial and incremental API ingestion.
-- Source data profiling and batch validation.
-- Google Cloud Storage integration.
-- BigQuery raw and clean table creation and validation.
-- SQL-based data transformations and summary table generation.
-- Containerized Python pipeline deployed as a Cloud Run Job.
-- Cloud Scheduler configured for daily execution at 6:00 AM Central Time.
-- Manual end-to-end Cloud Run execution successfully tested.
-- Looker Studio analytics dashboard created and refreshed.
-- Dashboard embedded in a Google Sites client-facing website.
 
-**Pending verification and future improvements:**
-- Verify the first scheduled Cloud Scheduler execution.
-- Improve raw-table idempotency for safer retries.
+- Initial and incremental API ingestion.
+- Source profiling and batch validation.
+- Google Cloud Storage integration.
+- BigQuery raw and clean data processing.
+- SQL-based transformations and summary tables.
+- Docker containerization and Cloud Run Job deployment.
+- Cloud Scheduler daily schedule configuration.
+- Successful manual end-to-end pipeline execution.
+- Looker Studio dashboard development.
+- Dashboard publication through Google Sites.
+- GitHub project documentation and source control.
+
+**Next improvements:**
+
+- Verify the first scheduled daily execution.
+- Improve raw-table idempotency to prevent duplicate appends during retries.
 - Make the October-specific daily summary dynamic.
-- Add pipeline monitoring and failure notifications.
+- Add pipeline monitoring, execution logging, and failure notifications.
+- Expand analytical reporting and dashboard capabilities.
+
+
