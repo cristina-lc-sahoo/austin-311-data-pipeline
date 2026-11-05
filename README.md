@@ -80,28 +80,65 @@ Created an interactive dashboard titled **Austin 311 Service Request Analytics**
 
 ## Repository Contents
 
-- `ingest.py` — Initial data ingestion script.
-- `incremental_ingest.py` — Incremental ingestion script.
-- `profile_data.py` — Data profiling script.
-- `validate_batches.py` — Batch comparison and validation script.
+- `ingest.py` — Initial Austin 311 data ingestion script.
+- `incremental_ingest.py` — Incremental ingestion script for retrieving new and updated records.
+- `profile_data.py` — Source data profiling and inspection.
+- `validate_batches.py` — Batch comparison and validation, including duplicate and overlap checks.
+- `daily_pipeline.py` — Automated daily pipeline orchestration, including API ingestion, GCS uploads, BigQuery loading, and SQL execution.
+- `Dockerfile` — Defines the container image used to run the pipeline in Cloud Run.
+- `requirements.txt` — Python dependencies.
+- `sql/refresh_clean.sql` — Deduplicates raw records and retains the latest version of each service request.
+- `sql/refresh_monthly.sql` — Rebuilds monthly service request summary data.
+- `sql/refresh_daily_october.sql` — Rebuilds daily service request counts for October 2026.
 - `data/` — Local source data files (excluded from this public repository).
 
-## Planned Enhancements
+## Pipeline Architecture
 
-The next development phase will focus on automating the pipeline and publishing refreshed analytics:
+The project uses Google Cloud services to automate the ingestion, storage, transformation, and reporting of Austin 311 service request data.
 
-1. Use GitHub Actions to schedule daily Python ingestion.
-2. Retrieve new and updated Austin 311 records.
-3. Upload timestamped raw files to Google Cloud Storage.
-4. Load and merge records into BigQuery without duplication.
-5. Refresh reporting tables and run data quality checks.
-6. Configure Looker Studio data freshness.
-7. Embed the dashboard in a client-facing website.
-8. Add execution logging and failure notifications.
+**Pipeline flow:**
+
+Austin 311 API → Cloud Run Job (Python) → Google Cloud Storage → BigQuery → Looker Studio → Google Sites
+
+### Cloud Components
+
+- **Cloud Scheduler:** Configured to trigger the pipeline daily at 6:00 AM Central Time.
+- **Cloud Run Jobs:** Executes the containerized Python pipeline.
+- **Google Cloud Storage:** Stores timestamped incremental CSV files, SQL transformation files, and the pipeline watermark.
+- **BigQuery:** Stores raw and cleaned service request data and analytical summary tables.
+- **Looker Studio:** Provides interactive reporting and visualization.
+- **Google Sites:** Hosts the client-facing dashboard website.
+
+### Data Processing
+
+1. Retrieve the last successful run timestamp from Cloud Storage.
+2. Request new and updated service records from the Austin 311 API, using a 48-hour overlap to capture updates.
+3. Write timestamped CSV files and upload them to Cloud Storage.
+4. Append incoming records to the BigQuery raw table.
+5. Execute SQL transformations in BigQuery:
+   - Deduplicate records by service request number, retaining the latest version.
+   - Rebuild monthly request summaries.
+   - Rebuild daily October 2026 request summaries.
+6. Update the pipeline watermark after successful processing.
+
+Python handles pipeline orchestration, while SQL performs the data transformations in BigQuery.
 
 ## Project Status
 
-**Current phase:** Initial ingestion, cloud data warehousing, validation, and dashboard development completed.
+**Completed:**
+- Initial and incremental API ingestion.
+- Source data profiling and batch validation.
+- Google Cloud Storage integration.
+- BigQuery raw and clean table creation and validation.
+- SQL-based data transformations and summary table generation.
+- Containerized Python pipeline deployed as a Cloud Run Job.
+- Cloud Scheduler configured for daily execution at 6:00 AM Central Time.
+- Manual end-to-end Cloud Run execution successfully tested.
+- Looker Studio analytics dashboard created and refreshed.
+- Dashboard embedded in a Google Sites client-facing website.
 
-**Next phase:** Daily pipeline automation and client-facing report publication.
-
+**Pending verification and future improvements:**
+- Verify the first scheduled Cloud Scheduler execution.
+- Improve raw-table idempotency for safer retries.
+- Make the October-specific daily summary dynamic.
+- Add pipeline monitoring and failure notifications.
